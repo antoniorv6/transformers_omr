@@ -62,3 +62,27 @@ def data_preparation_CTC(X, Y, height):
 
 
     return X_train, Y_train, L_train, T_train
+
+
+def data_preparation_CTC_vit(X, Y, height, patch_size):
+    # X_train, L_train
+    max_image_width = max([img.shape[1] for img in X])
+
+    X_train = np.zeros(shape=[len(X), height, max_image_width, 1], dtype=np.float32)
+    L_train = np.zeros(shape=[len(X),1])
+
+    for i, img in enumerate(X):
+        X_train[i, 0:img.shape[0], 0:img.shape[1],0] = img
+        L_train[i] = img.shape[1] # TODO Calcular el width_reduction de la CRNN
+
+    # Y_train, T_train
+    max_length_seq = max([len(w) for w in Y])
+
+    Y_train = np.zeros(shape=[len(X),max_length_seq])
+    T_train = np.zeros(shape=[len(X),1])
+    for i, seq in enumerate(Y):
+        Y_train[i, 0:len(seq)] = seq
+        T_train[i] = len(seq)
+
+
+    return X_train, Y_train, L_train, T_train

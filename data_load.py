@@ -52,7 +52,7 @@ def loadData(path):
 def loadDataPrimus(path):
     X = []
     Y = []
-    limit = 10000
+    limit = 20000
     i = 0
     for folder in tqdm.tqdm(os.listdir(f"{path}")):
        img = cv2.imread(f"{path}/{folder}/{folder}_distorted.jpg", 0)

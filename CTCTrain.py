@@ -8,7 +8,7 @@ import argparse
 import numpy as np
 from sklearn.utils import shuffle
 import itertools
-from utils import check_and_retrieveVocabulary, data_preparation_CTC
+from utils import check_and_retrieveVocabulary, data_preparation_CTC, data_preparation_CTC_vit
 import cv2
 import os
 import tensorflow as tf
@@ -115,6 +115,8 @@ def main():
 
     XTrain, YTrain = loadDataPrimus(args.data_path)
 
+    max_w = max([img.shape[1] for img in XTrain])
+    
     XTrain, YTrain = shuffle(XTrain, YTrain)
 
     Y_Encoded = []
@@ -137,8 +139,9 @@ def main():
     model_tr = None
     model_pr = None
 
+
     if args.model_name == "ViTCTC":
-        model_tr, model_pr = get_vit_model(input_shape=(fixed_height,None,1),vocabulary_size=vocabulary_size, patch_size=fixed_height, model_depth=128)
+        model_tr, model_pr = get_vit_model(input_shape=(fixed_height,None,1),vocabulary_size=vocabulary_size, model_depth=256)
 
     if args.model_name == "CNNTransformerCTC":
         model_tr, model_pr = get_CNNTransformer_CTC_model(input_shape=(fixed_height,None,1),vocabulary_size=vocabulary_size, 
@@ -152,7 +155,11 @@ def main():
     XTrain = XTrain[int(len(XTrain)*0.25):]
     YTrain = YTrain[int(len(YTrain)*0.25):]
 
-    X_train, Y_train, L_train, T_train = data_preparation_CTC(XTrain, YTrain, fixed_height)
+    if args.model_name == "ViTCTC":
+        X_train, Y_train, L_train, T_train = data_preparation_CTC_vit(XTrain, YTrain, fixed_height, 16)
+    
+    else:
+        X_train, Y_train, L_train, T_train = data_preparation_CTC(XTrain, YTrain, fixed_height)
 
     print('Training with ' + str(X_train.shape[0]) + ' samples.')
     

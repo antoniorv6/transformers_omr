@@ -46,7 +46,7 @@ class TransformerEncoder(tf.keras.layers.Layer):
         seq_len = tf.shape(inputs)[1]
         x=inputs
         #x = self.embedding(inputs) # (batch_size, input_seq_len, d_model)
-        #x *= tf.math.sqrt(tf.cast(self.model_depth, tf.float32))
+        x *= tf.math.sqrt(tf.cast(self.model_depth, tf.float32))
         x += self.position_encoding[:, :seq_len, :]
 
         x = self.dropout(x)

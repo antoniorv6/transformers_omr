@@ -34,30 +34,32 @@ class Patches(tf.keras.layers.Layer):
         patches = tf.reshape(patches, [batch_size, -1, patch_dims])
         return patches
 
-class PatchEncoder(tf.keras.layers.Layer):
-    def __init__(self, num_patches, projection_dim):
-        super(PatchEncoder, self).__init__()
-        self.num_patches = num_patches
-        self.projection = Dense(units=projection_dim)
-        self.position_embedding = Embedding(
-            input_dim=num_patches, output_dim=projection_dim
-        )
+#class PatchEncoder(tf.keras.layers.Layer):
+#    def __init__(self, num_patches, projection_dim):
+#        super(PatchEncoder, self).__init__()
+#        self.num_patches = num_patches
+#        self.projection = Dense(units=projection_dim)
+#        self.position_embedding = Embedding(
+#            input_dim=num_patches, output_dim=projection_dim
+#        )
+#
+#    def call(self, patch):
+#        positions = tf.range(start=0, limit=self.num_patches, delta=1)
+#        encoded = self.projection(patch) + self.position_embedding(positions)
+#        return encoded
 
-    def call(self, patch):
-        positions = tf.range(start=0, limit=self.num_patches, delta=1)
-        encoded = self.projection(patch) + self.position_embedding(positions)
-        return encoded
 
-
-def get_vit_model(input_shape, patch_size, model_depth, vocabulary_size):
+def get_vit_model(input_shape, model_depth, vocabulary_size):
     
     input_data = Input(name='the_input', shape=input_shape, dtype='float32')
-    num_patches = (input_shape[0] // patch_size) ** 2
+    #num_patches = (input_shape[0] // patch_size) * (max_image_width // patch_size)
     
-    patches = Patches(patch_size)(input_data)
-    encoded_patches = PatchEncoder(num_patches, model_depth)(patches)
+    patches = Permute((2, 1, 3))(input_data)
+    ##inner = PositionEncoding2D(conv_filters[-1])(inner)
+    patches = Reshape(target_shape=(-1, input_shape[0]), name='reshape')(patches)
+    encoded_patches = Dense(model_depth)(patches)
 
-    encoder_out = TransformerEncoder(8, model_depth, 4, model_depth*2, 1024)(encoded_patches, mask=None)
+    encoder_out = TransformerEncoder(4, model_depth, 8, 2048, 2048)(encoded_patches, mask=None)
 
     output = Dense(vocabulary_size+1, name='dense2')(encoder_out)
     y_pred = Activation('softmax', name='softmax')(output)
