@@ -32,7 +32,7 @@ class TransformerEncoder(tf.keras.layers.Layer):
         self.maximum_pos_encoding = maximum_pos_encoding
         self.dropout_rate = dropout_rate
 
-        #self.embedding = Embedding(input_vocab_size, model_depth)
+        #self.embedding = Embedding(512, model_depth)
         self.position_encoding = TransformerEncoder.positional_encoding(self.maximum_pos_encoding, self.model_depth)
 
         self.encoderLayers = [EncoderLayer(model_depth=self.model_depth,

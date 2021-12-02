@@ -5,7 +5,7 @@ from tensorflow.keras.optimizers import Adam
 
 from .TransformerEncoder import TransformerEncoder
 from .TransformerDecoder import TransformerDecoder
-from tensorflow.keras.layers import Input, Dense, LeakyReLU, Conv2D, MaxPooling2D, BatchNormalization, Permute, Reshape, Concatenate, Softmax
+from tensorflow.keras.layers import Input, Dense, LeakyReLU, Conv2D, MaxPooling2D, BatchNormalization, Permute, Reshape, Concatenate, Softmax, Flatten
 from tensorflow.keras.models import Model
 
 loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, reduction='none')
@@ -45,7 +45,7 @@ def Transformer_Loss_AIAYN(real, pred):
     return tf.reduce_sum(loss_)/tf.reduce_sum(mask)
 
 def get_cnn_transformer(conv_filters, num_convs, pool_layers, image_input_shape, MAX_SEQ_LEN, VOCAB_SIZE,
-                      transformer_encoder_layers, transformer_decoder_layers, ff_depth, num_heads, POS_ENCODING_INPUT, POS_ENCODING_TARGET):
+                      transformer_encoder_layers, transformer_decoder_layers, transformer_depth, ff_depth, num_heads, POS_ENCODING_INPUT, POS_ENCODING_TARGET):
 
     #Define convolutional block, remember that we have to scale the mask too
     image_input   =      Input(name='image_input', shape = image_input_shape, dtype=tf.float32)
@@ -75,11 +75,14 @@ def get_cnn_transformer(conv_filters, num_convs, pool_layers, image_input_shape,
 
     reshape = (image_input_shape[0] // 2**len(pool_layers)) * conv_filters[-1] #column-level analysis
     #model_depth = conv_filters[-1] #pixel-level analysis
+    #encoder_input = Flatten()(convNet) 
     encoder_input = Reshape(target_shape=(-1, reshape), name='reshape_layer')(conversion) #(batch_size, seq_len, d_model)
 
-    model_depth = 512
+    model_depth = transformer_depth
+    if reshape != model_depth:
+        encoder_input = Dense(model_depth)(encoder_input)
 
-    encoder_input = Dense(model_depth)(encoder_input)
+    #encoder_input = Dense(model_depth)(encoder_input)
     ### NEED TO CONCATENATE (LAST_CONV_SIZE) DUPLIACTES IN THE MASK TO ACHIEVE A CORRECT RESHAPE OF THE MASK
 
     #encoder_input = Dense(reshape_val, activation="softmax")(encoder_input)
