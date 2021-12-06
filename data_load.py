@@ -49,16 +49,24 @@ def loadData(path):
     print("Data Loaded!")
     return np.array(X), np.array(Y)
 
-def loadDataPrimus(path):
+def loadDataPrimus(path, encoding):
     X = []
     Y = []
-    limit = 20000
+    limit = 10000
     i = 0
     for folder in tqdm.tqdm(os.listdir(f"{path}")):
        img = cv2.imread(f"{path}/{folder}/{folder}_distorted.jpg", 0)
        X.append(img)
        with open(f"{path}/{folder}/{folder}.agnostic") as agnosticfile:
-           Y.append(agnosticfile.readline().strip().split("\t"))
+           if encoding == "standard":
+            Y.append(agnosticfile.readline().strip().split("\t"))
+           else:
+            splitted_seq = []
+            sequence = agnosticfile.readline().strip().split("\t")
+            for token in sequence:
+                for char in token.split("-"):
+                    splitted_seq.append(char)
+            Y.append(splitted_seq)
        
        if i > limit:
            break

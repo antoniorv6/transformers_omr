@@ -44,13 +44,13 @@ def Transformer_Loss_AIAYN(real, pred):
 
     return tf.reduce_sum(loss_)/tf.reduce_sum(mask)
 
-def get_cnn_transformer(conv_filters, num_convs, pool_layers, image_input_shape, MAX_SEQ_LEN, VOCAB_SIZE,
+def get_cnn_transformer(conv_filters, num_convs, pool_layers, image_input_shape, VOCAB_SIZE,
                       transformer_encoder_layers, transformer_decoder_layers, transformer_depth, ff_depth, num_heads, POS_ENCODING_INPUT, POS_ENCODING_TARGET):
 
     #Define convolutional block, remember that we have to scale the mask too
     image_input   =      Input(name='image_input', shape = image_input_shape, dtype=tf.float32)
     decoder_input =      Input(name='decoder_input', shape= (None, ))
-    look_ahead_mask    = Input(name='look_ah_mask', shape=(None, ))
+    look_ahead_mask    = Input(name='look_ah_mask', shape=(None, None, None))
 
     #=== CONVOLUTIONAL BLOCK ===#
     #convNet  = VGG16(include_top=False, input_shape=image_input_shape)
@@ -70,17 +70,19 @@ def get_cnn_transformer(conv_filters, num_convs, pool_layers, image_input_shape,
 
 
     #=== CONVOLUTIONAL TO TRANSFORMER CONVERSION ===#
-    conversion = Permute((2,1,3))(convNet)
+    convNet = Permute((2,1,3))(convNet)
     ##(-1, (fixed_height / pool_heights ** pool_layers)*last_conv_filters)
 
-    reshape = (image_input_shape[0] // 2**len(pool_layers)) * conv_filters[-1] #column-level analysis
     #model_depth = conv_filters[-1] #pixel-level analysis
-    #encoder_input = Flatten()(convNet) 
-    encoder_input = Reshape(target_shape=(-1, reshape), name='reshape_layer')(conversion) #(batch_size, seq_len, d_model)
-
+    #encoder_input = Flatten()(convNet)
     model_depth = transformer_depth
-    if reshape != model_depth:
-        encoder_input = Dense(model_depth)(encoder_input)
+    #encoder_input = Conv2D(model_depth, kernel_size=3, padding='same')(convNet)
+    reshape = (image_input_shape[0] // 2**len(pool_layers)) * conv_filters[-1] #column-level analysis
+    encoder_input = Reshape(target_shape=(-1, reshape), name='reshape_layer')(convNet) #(batch_size, seq_len, d_model)
+    if(reshape!=model_depth):
+        encoder_input = Dense(model_depth)(encoder_input) 
+
+    #encoder_input = Conv2D(model_depth)(encoder_input)
 
     #encoder_input = Dense(model_depth)(encoder_input)
     ### NEED TO CONCATENATE (LAST_CONV_SIZE) DUPLIACTES IN THE MASK TO ACHIEVE A CORRECT RESHAPE OF THE MASK

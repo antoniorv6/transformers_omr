@@ -4,6 +4,8 @@ from model_templates.CRNNCTC import get_CRNN_CTC_model
 from model_templates.CNNTRFCTC import get_CNNTransformer_CTC_model
 from model_templates.ViTCTC import get_vit_model
 
+from sklearn.model_selection import train_test_split
+
 import argparse
 import numpy as np
 from sklearn.utils import shuffle
@@ -31,6 +33,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Program arguments to work")
     parser.add_argument('--data_path', type=str, help="Corpus to be processed")
     parser.add_argument('--model_name', type=str, help="Model name")
+    parser.add_argument('--encoding_type', type=str, help="Encoding type")
 
     args = parser.parse_args()
     return args
@@ -55,7 +58,7 @@ def levenshtein(a,b):
 
     return current[n]
 
-def getCTCValidationData(model, X, Y, i2w):
+def getCTCValidationData(model, X, Y, i2w, encodingType):
     acc_ed_ser = 0
     acc_len_ser = 0
 
@@ -71,9 +74,20 @@ def getCTCValidationData(model, X, Y, i2w):
         decoded = []
         for c in out_best:
             if c < len(i2w):  # CTC Blank must be ignored
-                decoded.append(i2w[c])
+                if encodingType == "standard":
+                    for token in i2w[c].split("-"):
+                        decoded.append(token)
+                else:
+                    decoded.append(i2w[c])
 
-        groundtruth = [i2w[label] for label in Y[i]]
+        if encodingType == "ssequence":
+            groundtruth = [i2w[label] for label in Y[i]]
+        else:
+            gtseq = []
+            for token in Y[i]:
+                for char in i2w[token].split("-"):
+                    gtseq.append(char)
+            groundtruth = gtseq
 
         if(i == randomindex):
             print(f"Prediction - {decoded}")
@@ -113,9 +127,7 @@ def main():
     XTrain = []
     YTrain = []
 
-    XTrain, YTrain = loadDataPrimus(args.data_path)
-
-    max_w = max([img.shape[1] for img in XTrain])
+    XTrain, YTrain = loadDataPrimus(args.data_path, args.encoding_type)
     
     XTrain, YTrain = shuffle(XTrain, YTrain)
 
@@ -149,11 +161,9 @@ def main():
     if args.model_name == "CRNNCTC":
         model_tr, model_pr = get_CNNTransformer_CTC_model(input_shape=(fixed_height,None,1),vocabulary_size=vocabulary_size)
 
-    XValidate = XTrain[:int(len(XTrain)*0.25)]
-    YValidate = YTrain[:int(len(YTrain)*0.25)]
+    XTrain, XValidate, YTrain, YValidate = train_test_split(XTrain, YTrain, test_size=0.5, random_state=0)
+    XValidate, XTest, YValidate, YTest = train_test_split(XValidate, YValidate, test_size=0.5, random_state=0)
 
-    XTrain = XTrain[int(len(XTrain)*0.25):]
-    YTrain = YTrain[int(len(YTrain)*0.25):]
 
     if args.model_name == "ViTCTC":
         X_train, Y_train, L_train, T_train = data_preparation_CTC_vit(XTrain, YTrain, fixed_height, 16)
@@ -175,8 +185,10 @@ def main():
 
     for super_epoch in range(10000):
        model_tr.fit(inputs,outputs, batch_size = 16, epochs = 5, verbose = 1)
-       SER = getCTCValidationData(model_pr, XValidate, YValidate, i2w)
-       print(f"EPOCH {super_epoch} | SER {SER}")
+       SER = getCTCValidationData(model_pr, XValidate, YValidate, i2w, args.encoding_type)
+       SERTEST = getCTCValidationData(model_pr, XTest, YTest, i2w, args.encoding_type)
+
+       print(f"EPOCH {super_epoch} | SER IN VALIDATION {SER} | SER IN TEST {SERTEST}")
        if SER < best_ser:
            print("SER improved - Saving epoch")
            model_pr.save_weights(f"{args.model_name}.h5")
@@ -189,7 +201,8 @@ def main():
     
     model = model_pr.load_weights(f"{args.model_name}.h5")
 
-    prediction_array, ground_truth = CTCTest(model, XValidate, YValidate, i2w)
+    prediction_array, ground_truth = CTCTest(model, XTest, YTest, i2w)
+    
     for idx, prediciton in enumerate(prediction_array):
         with open(f"test/img{idx}_results.txt", "w") as output_file_pr:
             output_file_pr.write("Prediction - " + " ".join(prediciton) + "\n")

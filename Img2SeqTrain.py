@@ -2,12 +2,14 @@ import tensorflow as tf
 import numpy as np
 import argparse
 import random
+
 from data_load import loadData, loadDataPrimus
 from sklearn.utils import shuffle
 from model_templates.CNNTRF import get_cnn_transformer
 from utils import check_and_retrieveVocabulary
 import cv2
 import tqdm
+from sklearn.model_selection import train_test_split
 
 config = tf.compat.v1.ConfigProto(gpu_options = 
                          tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.8)
@@ -16,7 +18,7 @@ config.gpu_options.allow_growth = True
 session = tf.compat.v1.Session(config=config)
 tf.compat.v1.keras.backend.set_session(session)
 
-fixed_height = 128
+fixed_height = 64
 BATCH_SIZE = 16
 
 def parse_arguments():
@@ -78,7 +80,7 @@ def batch_confection(X, Y, max_image_width, max_seq_len, w2i, isplain):
 
     for i, seq in enumerate(Y):
         for j, char in enumerate(seq):
-            Batch_Y[i][j] = random.randint(0, len(w2i)-1)
+            Batch_Y[i][j] = 1.#random.randint(1, len(w2i)-1)
 
             if j > 0:
                 Batch_T[i][j-1] = char
@@ -106,7 +108,7 @@ def predict_sequence(model, image, w2i, i2w, max_seq_len, max_image_width):
     encoder_input, decoder_input, _ = batch_confection([image], [np.zeros(max_seq_len)], max_image_width, max_seq_len, w2i, False)
     target_padding_mask = create_target_masks(decoder_input)
     inputs = [encoder_input, decoder_input, target_padding_mask]
-    predictions = model.predict(inputs, batch_size=BATCH_SIZE)
+    predictions = model.predict(inputs, batch_size=1)
     for prediction in predictions:
         raw_sequence = [i2w[char] for char in np.argmax(prediction, axis=1)]
         predictionSequence = ['<sos>']
@@ -127,8 +129,6 @@ def main():
     for i,sequence in enumerate(YTrain):
         YTrain[i] = ['<sos>'] + sequence + ['<eos>']
 
-    XTrain, YTrain = shuffle(XTrain, YTrain)
-
     Y_Encoded = []
     w2i, i2w = check_and_retrieveVocabulary([YTrain], "./vocab", args.model_name)
     
@@ -143,38 +143,44 @@ def main():
     print(YTrain.shape)
 
     max_image_width = max([img.shape[1] for img in XTrain])
+    max_image_height = max([img.shape[0] for img in XTrain])
     max_length_seq = max([len(w) for w in YTrain])
     
     model = None
     if args.model_name == "CNNTransformer":
-         model = get_cnn_transformer(conv_filters=[16, 32, 64],
+         model = get_cnn_transformer(conv_filters=[32, 64, 128],
                               num_convs = [1,1,1],
-                              pool_layers=[(2, 2), (2, 1), (2, 1)],
+                              pool_layers=[2, 2, 2],
                               image_input_shape=(fixed_height, None, 1),
-                              MAX_SEQ_LEN=max_length_seq,
                               VOCAB_SIZE=len(w2i),
-                              transformer_encoder_layers=1,
-                              transformer_decoder_layers=1,
+                              transformer_encoder_layers=2,
+                              transformer_decoder_layers=2,
+                              transformer_depth=512,
                               ff_depth=512,
                               num_heads=8,
                               POS_ENCODING_INPUT=max_image_width,
                               POS_ENCODING_TARGET=512)
 
     
-    XVal = XTrain[:int(len(XTrain)*0.25)]
-    YVal = YTrain[:int(len(YTrain)*0.25)]
-
-    XTrain = XTrain[int(len(XTrain)*0.25):]
-    YTrain = YTrain[int(len(YTrain)*0.25):]
+    XTrain, XVal, YTrain, YVal = train_test_split(XTrain, YTrain, test_size=0.25, random_state=0)
 
     batch_gen = batch_generator(XTrain, YTrain, BATCH_SIZE, max_image_width, max_length_seq, w2i, True)
-
+    best_ser = 10000
     for SUPER_EPOCH in range(100):
         print(f"================ EPOCH {SUPER_EPOCH + 1} ================ ")     
-        model.fit_generator(batch_gen, steps_per_epoch=len(XTrain)//BATCH_SIZE, epochs=5, verbose=1)
+        model.fit(batch_gen, steps_per_epoch=len(XTrain)//BATCH_SIZE, epochs=5, verbose=1)
         image_index = random.randint(0, len(XVal)-1)
         print(f"Performing prediction in image {image_index}")
+        edtrain = 0
         ed = 0
+        for i in tqdm.tqdm(range(0,len(XTrain)-1)):
+            prediction = predict_sequence(model, XTrain[i], w2i, i2w, max_length_seq, max_image_width)
+            truesequence = [i2w[char] for char in YTrain[i]]
+            edtrain += levenshtein(prediction, truesequence)/len(truesequence)
+            if i == image_index:
+                print("Prediction: " + str(prediction))
+                print("True: " + str(truesequence))
+
         for i in tqdm.tqdm(range(0,len(XVal)-1)):
             prediction = predict_sequence(model, XVal[i], w2i, i2w, max_length_seq, max_image_width)
             truesequence = [i2w[char] for char in YVal[i]]
@@ -183,8 +189,15 @@ def main():
                 print("Prediction: " + str(prediction))
                 print("True: " + str(truesequence))
         
+        SERTRAIN = (100. *edtrain) / len(XTrain)
         SER = (100.*ed) / len(XVal)
-        print(f"SUPER EPOCH {SUPER_EPOCH+1} | SER {SER}")
+        if SER < best_ser:
+            print(f"SER improved from {best_ser} to {SER}, saving model")
+            model.save_weights(f"{args.model_name}.h5")
+            best_ser = SER
+
+
+        print(f"SUPER EPOCH {SUPER_EPOCH+1} | SER TRAIN {SERTRAIN} | SER VALIDATION {SER}")
 
 
 
