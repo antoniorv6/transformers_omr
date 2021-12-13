@@ -13,8 +13,7 @@ class EncoderLayer(tf.keras.layers.Layer):
 
 
         self.multi_headed_attention = MHA(self.model_depth, self.num_heads)
-        self.pw_feedf_net_relu = Dense(self.feed_forward_depth, activation='gelu') #First layer must have a ReLu
-        self.pw_feedf_net_relu = Dense(self.feed_forward_depth/2, activation='gelu') #First layer must have a ReLu
+        self.pw_feedf_net_relu = Dense(self.feed_forward_depth, activation='relu') #First layer must have a ReLu
         self.pw_feedf_net_out = Dense(self.model_depth) #Output of the point wise feed forward net that we are interested of
 
         self.layerNormalization1 = LayerNormalization(epsilon=1e-6)

@@ -1,3 +1,4 @@
+from numpy.core.fromnumeric import argmin
 from data_load import loadData, loadDataPrimus
 
 from model_templates.CRNNCTC import get_CRNN_CTC_model
@@ -27,13 +28,14 @@ config.gpu_options.allow_growth = True
 session = tf.compat.v1.Session(config=config)
 tf.compat.v1.keras.backend.set_session(session)
 
-fixed_height = 64
+fixed_height = 128
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Program arguments to work")
     parser.add_argument('--data_path', type=str, help="Corpus to be processed")
     parser.add_argument('--model_name', type=str, help="Model name")
     parser.add_argument('--encoding_type', type=str, help="Encoding type")
+    parser.add_argument('--corpus_name', type=str, help="Corpus name")
 
     args = parser.parse_args()
     return args
@@ -75,7 +77,7 @@ def getCTCValidationData(model, X, Y, i2w, encodingType):
         for c in out_best:
             if c < len(i2w):  # CTC Blank must be ignored
                 if encodingType == "standard":
-                    for token in i2w[c].split("-"):
+                    for token in i2w[c].split(":"):
                         decoded.append(token)
                 else:
                     decoded.append(i2w[c])
@@ -85,7 +87,7 @@ def getCTCValidationData(model, X, Y, i2w, encodingType):
         else:
             gtseq = []
             for token in Y[i]:
-                for char in i2w[token].split("-"):
+                for char in i2w[token].split(":"):
                     gtseq.append(char)
             groundtruth = gtseq
 
@@ -93,7 +95,7 @@ def getCTCValidationData(model, X, Y, i2w, encodingType):
             print(f"Prediction - {decoded}")
             print(f"True - {groundtruth}")
 
-        acc_len_ser += len(Y[i])
+        acc_len_ser += len(groundtruth)
         acc_ed_ser += levenshtein(decoded, groundtruth)
 
 
@@ -127,12 +129,13 @@ def main():
     XTrain = []
     YTrain = []
 
-    XTrain, YTrain = loadDataPrimus(args.data_path, args.encoding_type)
+    XTrain, YTrain = loadData(args.data_path, args.encoding_type)
     
     XTrain, YTrain = shuffle(XTrain, YTrain)
 
     Y_Encoded = []
-    w2i, i2w = check_and_retrieveVocabulary([YTrain], "./vocab", args.model_name)
+
+    w2i, i2w = check_and_retrieveVocabulary([YTrain], f"./vocab/{args.corpus_name}_{args.encoding_type}", args.model_name)
     
     for i in range(len(XTrain)):
         img = (255. - XTrain[i]) / 255.
@@ -141,10 +144,10 @@ def main():
         Y_Encoded.append([w2i[symbol] for symbol in YTrain[i]])         
 
     YTrain = np.array(Y_Encoded)
+    #print(YTrain[0])
+    #print([len(seq) for seq in YTrain])
     print(XTrain.shape)
     print(YTrain.shape)
-
-    #sys.exit()
 
     vocabulary_size = len(w2i)
 
@@ -157,9 +160,9 @@ def main():
 
     if args.model_name == "CNNTransformerCTC":
         model_tr, model_pr = get_CNNTransformer_CTC_model(input_shape=(fixed_height,None,1),vocabulary_size=vocabulary_size, 
-                                                          transf_nheads=8, transf_depth=128, transf_ffunits=512)
+                                                          transf_nheads=8, transf_depth=128, transf_ffunits=256)
     if args.model_name == "CRNNCTC":
-        model_tr, model_pr = get_CNNTransformer_CTC_model(input_shape=(fixed_height,None,1),vocabulary_size=vocabulary_size)
+        model_tr, model_pr = get_CRNN_CTC_model(input_shape=(fixed_height,None,1),vocabulary_size=vocabulary_size)
 
     XTrain, XValidate, YTrain, YValidate = train_test_split(XTrain, YTrain, test_size=0.5, random_state=0)
     XValidate, XTest, YValidate, YTest = train_test_split(XValidate, YValidate, test_size=0.5, random_state=0)
@@ -169,6 +172,7 @@ def main():
         X_train, Y_train, L_train, T_train = data_preparation_CTC_vit(XTrain, YTrain, fixed_height, 16)
     
     else:
+        print("Preparing non ViT Model")
         X_train, Y_train, L_train, T_train = data_preparation_CTC(XTrain, YTrain, fixed_height)
 
     print('Training with ' + str(X_train.shape[0]) + ' samples.')
@@ -184,7 +188,7 @@ def main():
     not_improved = 0
 
     for super_epoch in range(10000):
-       model_tr.fit(inputs,outputs, batch_size = 16, epochs = 5, verbose = 1)
+       model_tr.fit(inputs,outputs, batch_size = 8, epochs = 5, verbose = 2)
        SER = getCTCValidationData(model_pr, XValidate, YValidate, i2w, args.encoding_type)
        SERTEST = getCTCValidationData(model_pr, XTest, YTest, i2w, args.encoding_type)
 
@@ -196,7 +200,7 @@ def main():
            not_improved = 0
        else:
            not_improved += 1
-           if not_improved == 5:
+           if not_improved == 20:
                break
     
     model = model_pr.load_weights(f"{args.model_name}.h5")

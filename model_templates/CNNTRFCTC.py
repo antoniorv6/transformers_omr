@@ -99,22 +99,27 @@ def ctc_lambda_func(args):
 
 def get_CNNTransformer_CTC_model(input_shape, vocabulary_size, transf_nheads, transf_depth, transf_ffunits):
 
-    conv_filters = [16,32,64]
-    features = (input_shape[0] // (2 ** 3)) * conv_filters[-1]
+    conv_filters = [32,32,64,64]
+    features = (input_shape[0] // (2 ** len(conv_filters))) * conv_filters[-1]
 
     input_data = Input(name='the_input', shape=input_shape, dtype='float32')
 
-    inner = Conv2D(conv_filters[0], 3, padding='same', name='conv1')(input_data)
+    inner = Conv2D(conv_filters[0], 5, padding='same', name='conv1')(input_data)
     inner = BatchNormalization()(inner)
     inner = LeakyReLU(alpha=0.2)(inner)
     inner = MaxPooling2D(pool_size=(2, 2), name='max1')(inner)
 
-    inner = Conv2D(conv_filters[1], 3, padding='same', name='conv2')(inner)
+    inner = Conv2D(conv_filters[1], 5, padding='same', name='conv2')(inner)
     inner = BatchNormalization()(inner)
     inner = LeakyReLU(alpha=0.2)(inner)
     inner = MaxPooling2D(pool_size=(2, 1), name='max2')(inner)
 
     inner = Conv2D(conv_filters[2], 3, padding='same')(inner)
+    inner = BatchNormalization()(inner)
+    inner = LeakyReLU(alpha=0.2)(inner)
+    inner = MaxPooling2D(pool_size=(2, 1))(inner)
+
+    inner = Conv2D(conv_filters[3], 3, padding='same')(inner)
     inner = BatchNormalization()(inner)
     inner = LeakyReLU(alpha=0.2)(inner)
     inner = MaxPooling2D(pool_size=(2, 1))(inner)
@@ -125,11 +130,10 @@ def get_CNNTransformer_CTC_model(input_shape, vocabulary_size, transf_nheads, tr
     #inner = Flatten()(inner)
 
     #inner = Embedding(features, transf_depth)(inner)
-    inner = Dense(transf_depth)(inner)
+    #inner = Dense(transf_depth)(inner)
     #inner = PositionalEncoding(1024, features)(inner)
     #inner = TransformerEncoderLayer(n_heads=transf_nheads, d_model=features, hidden_ff=transf_ffunits)(inner)
-    inner = TransformerEncoder(1, transf_depth, 8, 512, 1024)(inner, mask=None)
-
+    inner = TransformerEncoder(1, features, transf_nheads, transf_ffunits, 1100)(inner, mask=None)
 
     inner = Dense(vocabulary_size+1, name='dense2')(inner)
     y_pred = Activation('softmax', name='softmax')(inner)

@@ -23,11 +23,11 @@ def ctc_lambda_func(args):
 
 def get_CRNN_CTC_model(input_shape, vocabulary_size):
 
-    conv_filters = [16,32,64]
+    conv_filters = [32,64,64,128]
 
     input_data = Input(name='the_input', shape=input_shape, dtype='float32')
 
-    inner = Conv2D(conv_filters[0], 3, padding='same', name='conv1')(input_data)
+    inner = Conv2D(conv_filters[0], 5, padding='same', name='conv1')(input_data)
     inner = BatchNormalization()(inner)
     inner = LeakyReLU(alpha=0.2)(inner)
     inner = MaxPooling2D(pool_size=(2, 2), name='max1')(inner)
@@ -42,10 +42,15 @@ def get_CRNN_CTC_model(input_shape, vocabulary_size):
     inner = LeakyReLU(alpha=0.2)(inner)
     inner = MaxPooling2D(pool_size=(2, 1))(inner)
 
-    inner = Permute((2, 1, 3))(inner)
-    inner = Reshape(target_shape=(-1, (input_shape[0] // (2 ** 3)) * conv_filters[-1]), name='reshape')(inner)
+    inner = Conv2D(conv_filters[3], 3, padding='same')(inner)
+    inner = BatchNormalization()(inner)
+    inner = LeakyReLU(alpha=0.2)(inner)
+    inner = MaxPooling2D(pool_size=(2, 1))(inner)
 
-    inner = Bidirectional(LSTM(64, return_sequences = True, dropout=0.25))(inner)
+    inner = Permute((2, 1, 3))(inner)
+    inner = Reshape(target_shape=(-1, (input_shape[0] // (2 ** 4)) * conv_filters[-1]), name='reshape')(inner)
+
+    inner = Bidirectional(LSTM(512, return_sequences = True, dropout=0.25))(inner)
 
     inner = Dense(vocabulary_size+1, name='dense2')(inner)
     y_pred = Activation('softmax', name='softmax')(inner)

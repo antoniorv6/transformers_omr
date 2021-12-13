@@ -74,3 +74,30 @@ def loadDataPrimus(path, encoding):
        i+=1
     
     return np.array(X), np.array(Y)
+
+
+def loadData(path, encoding):
+    X = []
+    Y = []
+    limit = 10000
+    i = 0
+    for folder in tqdm.tqdm(os.listdir(f"{path}")):
+       img = cv2.imread(f"{path}/{folder}/{folder}.jpg", 0)
+       X.append(img)
+       with open(f"{path}/{folder}/{folder}.agnostic") as agnosticfile:
+           if encoding == "standard":
+            Y.append(agnosticfile.readline().strip().split(","))
+           else:
+            splitted_seq = []
+            sequence = agnosticfile.readline().strip().split(",")
+            for token in sequence:
+                for char in token.split(":"):
+                    splitted_seq.append(char)
+            Y.append(splitted_seq)
+       
+       if i > limit:
+           break
+       
+       i+=1
+    
+    return np.array(X), np.array(Y)
