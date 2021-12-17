@@ -133,7 +133,7 @@ def main():
     XTrain = []
     YTrain = []
 
-    XTrain, YTrain = loadDataPrimus(args.data_path, args.encoding)
+    XTrain, YTrain = loadData(args.data_path, args.encoding)
     for i,sequence in enumerate(YTrain):
         YTrain[i] = ['<sos>'] + sequence + ['<eos>']
 
@@ -151,7 +151,7 @@ def main():
     print(YTrain.shape)
 
     max_image_width = max([img.shape[1] for img in XTrain])
-    max_image_height = max([img.shape[0] for img in XTrain])
+    #max_image_height = max([img.shape[0] for img in XTrain])
     max_length_seq = max([len(w) for w in YTrain])
     
     model = None
@@ -184,7 +184,24 @@ def main():
         for i in tqdm.tqdm(range(0,len(XTrain)-1)):
             prediction = predict_sequence(model, XTrain[i], w2i, i2w, max_length_seq, max_image_width)
             truesequence = [i2w[char] for char in YTrain[i]]
-            edtrain += levenshtein(prediction, truesequence)/len(truesequence)
+            groundtruth = []
+            predict = []
+            if args.encoding == "standard":
+                gtseq = []
+                prseq = []
+                for token in prediction:
+                    for char in token.split(":"):
+                        prseq.append(char)
+                for token in truesequence:
+                    for char in i2w[token].split(":"):
+                        gtseq.append(char)
+                groundtruth = gtseq
+                predict = prseq
+            else:
+                predict = prediction
+                groundtruth = truesequence
+
+            edtrain += levenshtein(groundtruth, predict)/len(truesequence)
             if i == image_index:
                 print("Prediction: " + str(prediction))
                 print("True: " + str(truesequence))
@@ -192,7 +209,25 @@ def main():
         for i in tqdm.tqdm(range(0,len(XVal)-1)):
             prediction = predict_sequence(model, XVal[i], w2i, i2w, max_length_seq, max_image_width)
             truesequence = [i2w[char] for char in YVal[i]]
-            ed += levenshtein(prediction, truesequence)/len(truesequence)
+            groundtruth = []
+            predict = []
+            if args.encoding == "standard":
+                gtseq = []
+                prseq = []
+                for token in prediction:
+                    for char in token.split(":"):
+                        prseq.append(char)
+                for token in truesequence:
+                    for char in i2w[token].split(":"):
+                        gtseq.append(char)
+                groundtruth = gtseq
+                predict = prseq
+            else:
+                predict = prediction
+                groundtruth = truesequence
+            
+            ed += levenshtein(predict, groundtruth)/len(truesequence)
+            
             if i == image_index:
                 print("Prediction: " + str(prediction))
                 print("True: " + str(truesequence))
