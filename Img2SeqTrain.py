@@ -19,12 +19,14 @@ session = tf.compat.v1.Session(config=config)
 tf.compat.v1.keras.backend.set_session(session)
 
 fixed_height = 64
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Program arguments to work")
     parser.add_argument('--data_path', type=str, help="Corpus to be processed")
     parser.add_argument('--model_name', type=str, help="Model name")
+    parser.add_argument('--encoding', type=str, help="Encoding type")
+
 
     args = parser.parse_args()
     return args
@@ -75,17 +77,19 @@ def batch_confection(X, Y, max_image_width, max_seq_len, w2i, isplain):
     Batch_X = np.zeros(shape=[len(X), fixed_height, max_img_width, 1], dtype=np.float32)
     Batch_Y = np.zeros(shape=(len(Y), max_seq_len + 1))
     Batch_T = np.zeros(shape=(len(Y), max_seq_len + 1))
+
     for i, img in enumerate(X):
         Batch_X[i, 0:img.shape[0], 0:img.shape[1],0] = img
 
-    for i, seq in enumerate(Y):
-        for j, char in enumerate(seq):
-            Batch_Y[i][j] = 1.#random.randint(1, len(w2i)-1)
+    if not isplain:
+        for i, seq in enumerate(Y):
+            for j, char in enumerate(seq):
+                Batch_Y[i][j] = char#random.randint(1, len(w2i)-1)
 
-            if j > 0:
-                Batch_T[i][j-1] = char
+                if j > 0:
+                    Batch_T[i][j-1] = char
         
-        Batch_Y[i][0] = w2i['<sos>']
+            #Batch_Y[i][0] = w2i['<sos>']
 
     return Batch_X, Batch_Y, Batch_T
 
@@ -105,19 +109,23 @@ def batch_generator(X,Y, batch_size, max_image_width, max_seq_len, w2i, isplain)
         if index > len(X): index = 0
 
 def predict_sequence(model, image, w2i, i2w, max_seq_len, max_image_width):
-    encoder_input, decoder_input, _ = batch_confection([image], [np.zeros(max_seq_len)], max_image_width, max_seq_len, w2i, False)
-    target_padding_mask = create_target_masks(decoder_input)
-    inputs = [encoder_input, decoder_input, target_padding_mask]
-    predictions = model.predict(inputs, batch_size=1)
-    for prediction in predictions:
-        raw_sequence = [i2w[char] for char in np.argmax(prediction, axis=1)]
-        predictionSequence = ['<sos>']
-        for char in raw_sequence:
-            predictionSequence += [char]
-            if char == '<eos>':
-                break
-        #print(predictionSequence)
-    return predictionSequence
+    dec_in = [w2i['<sos>']]
+    predSequence = ['<sos>']
+    #target_padding_mask = create_target_masks(decoder_input)
+    for i in range(max_seq_len):
+        encoder_input, _, _ = batch_confection([image], [dec_in], max_image_width, max_seq_len, w2i, True)
+        target_padding_mask = create_target_masks(np.asarray([dec_in]))
+        inputs = [encoder_input, np.asarray([dec_in]), target_padding_mask]
+        predictions = model.predict(inputs, batch_size=1)
+        pred = predictions[0][-1]
+        pred_id = np.argmax(pred)
+        predSequence.append(i2w[pred_id])
+        dec_in.append(pred_id)
+        if i2w[pred_id] == '<eos>':
+            break
+    
+    print(predSequence)
+    return predSequence
 
 def main():
     args = parse_arguments()
@@ -125,7 +133,7 @@ def main():
     XTrain = []
     YTrain = []
 
-    XTrain, YTrain = loadDataPrimus(args.data_path)
+    XTrain, YTrain = loadDataPrimus(args.data_path, args.encoding)
     for i,sequence in enumerate(YTrain):
         YTrain[i] = ['<sos>'] + sequence + ['<eos>']
 
@@ -164,7 +172,7 @@ def main():
     
     XTrain, XVal, YTrain, YVal = train_test_split(XTrain, YTrain, test_size=0.25, random_state=0)
 
-    batch_gen = batch_generator(XTrain, YTrain, BATCH_SIZE, max_image_width, max_length_seq, w2i, True)
+    batch_gen = batch_generator(XTrain, YTrain, BATCH_SIZE, max_image_width, max_length_seq, w2i, False)
     best_ser = 10000
     for SUPER_EPOCH in range(100):
         print(f"================ EPOCH {SUPER_EPOCH + 1} ================ ")     
