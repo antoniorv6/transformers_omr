@@ -88,12 +88,12 @@ def batch_confection(X, Y, max_image_width, max_seq_len, w2i, isplain):
                 if random.random() > 0.5:
                     Batch_Y[i][j] = char
                 else:
-                    Batch_Y[i][j] = random.randint(1, len(w2i)-1)
+                    Batch_Y[i][j] = random.randint(3, len(w2i)-1)
 
                 if j > 0:
                     Batch_T[i][j-1] = char
         
-            #Batch_Y[i][0] = w2i['<sos>']
+            Batch_Y[i][0] = w2i['<sos>']
 
     return Batch_X, Batch_Y, Batch_T
 
