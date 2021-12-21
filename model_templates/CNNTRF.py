@@ -59,7 +59,7 @@ def get_cnn_transformer(conv_filters, num_convs, pool_layers, image_input_shape,
     for i in range(len(conv_filters)):
         for _ in range(num_convs[i]):
             if i == 0:
-                convNet = Conv2D(conv_filters[i], 3, padding='same')(image_input)
+                convNet = Conv2D(conv_filters[i], 5, padding='same')(image_input)
             else:
                 convNet = Conv2D(conv_filters[i], 3, padding='same')(convNet)
             convNet = BatchNormalization()(convNet)

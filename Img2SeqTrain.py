@@ -26,6 +26,7 @@ def parse_arguments():
     parser.add_argument('--data_path', type=str, help="Corpus to be processed")
     parser.add_argument('--model_name', type=str, help="Model name")
     parser.add_argument('--encoding', type=str, help="Encoding type")
+    parser.add_argument('--corpus_name', type=str, help="Corpus name")
 
 
     args = parser.parse_args()
@@ -84,7 +85,10 @@ def batch_confection(X, Y, max_image_width, max_seq_len, w2i, isplain):
     if not isplain:
         for i, seq in enumerate(Y):
             for j, char in enumerate(seq):
-                Batch_Y[i][j] = char#random.randint(1, len(w2i)-1)
+                if random.random() > 0.5:
+                    Batch_Y[i][j] = char
+                else:
+                    Batch_Y[i][j] = random.randint(1, len(w2i)-1)
 
                 if j > 0:
                     Batch_T[i][j-1] = char
@@ -124,7 +128,6 @@ def predict_sequence(model, image, w2i, i2w, max_seq_len, max_image_width):
         if i2w[pred_id] == '<eos>':
             break
     
-    print(predSequence)
     return predSequence
 
 def main():
@@ -138,7 +141,7 @@ def main():
         YTrain[i] = ['<sos>'] + sequence + ['<eos>']
 
     Y_Encoded = []
-    w2i, i2w = check_and_retrieveVocabulary([YTrain], "./vocab", args.model_name)
+    w2i, i2w = check_and_retrieveVocabulary([YTrain], f"./vocab/{args.corpus_name}_{args.encoding}", args.model_name)
     
     for i in range(len(XTrain)):
         img = (255. - XTrain[i]) / 255.
@@ -156,13 +159,13 @@ def main():
     
     model = None
     if args.model_name == "CNNTransformer":
-         model = get_cnn_transformer(conv_filters=[32, 64, 128],
-                              num_convs = [1,1,1],
-                              pool_layers=[2, 2, 2],
+         model = get_cnn_transformer(conv_filters=[32, 32, 64, 64],
+                              num_convs = [1,1,1,1],
+                              pool_layers=[[2,2], [2,1], [2,1], [2,1]],
                               image_input_shape=(fixed_height, None, 1),
                               VOCAB_SIZE=len(w2i),
-                              transformer_encoder_layers=2,
-                              transformer_decoder_layers=2,
+                              transformer_encoder_layers=1,
+                              transformer_decoder_layers=1,
                               transformer_depth=512,
                               ff_depth=512,
                               num_heads=8,
@@ -170,7 +173,9 @@ def main():
                               POS_ENCODING_TARGET=512)
 
     
-    XTrain, XVal, YTrain, YVal = train_test_split(XTrain, YTrain, test_size=0.25, random_state=0)
+    XTrain, XVal, YTrain, YVal = train_test_split(XTrain, YTrain, test_size=0.5, random_state=0)
+    XVal, XTest, YVal, YTest = train_test_split(XVal, YVal, test_size=0.5, random_state=0)
+
 
     batch_gen = batch_generator(XTrain, YTrain, BATCH_SIZE, max_image_width, max_length_seq, w2i, False)
     best_ser = 10000
@@ -181,31 +186,6 @@ def main():
         print(f"Performing prediction in image {image_index}")
         edtrain = 0
         ed = 0
-        for i in tqdm.tqdm(range(0,len(XTrain)-1)):
-            prediction = predict_sequence(model, XTrain[i], w2i, i2w, max_length_seq, max_image_width)
-            truesequence = [i2w[char] for char in YTrain[i]]
-            groundtruth = []
-            predict = []
-            if args.encoding == "standard":
-                gtseq = []
-                prseq = []
-                for token in prediction:
-                    for char in token.split(":"):
-                        prseq.append(char)
-                for token in truesequence:
-                    for char in i2w[token].split(":"):
-                        gtseq.append(char)
-                groundtruth = gtseq
-                predict = prseq
-            else:
-                predict = prediction
-                groundtruth = truesequence
-
-            edtrain += levenshtein(groundtruth, predict)/len(truesequence)
-            if i == image_index:
-                print("Prediction: " + str(prediction))
-                print("True: " + str(truesequence))
-
         for i in tqdm.tqdm(range(0,len(XVal)-1)):
             prediction = predict_sequence(model, XVal[i], w2i, i2w, max_length_seq, max_image_width)
             truesequence = [i2w[char] for char in YVal[i]]
@@ -218,7 +198,32 @@ def main():
                     for char in token.split(":"):
                         prseq.append(char)
                 for token in truesequence:
-                    for char in i2w[token].split(":"):
+                    for char in token.split(":"):
+                        gtseq.append(char)
+                groundtruth = gtseq
+                predict = prseq
+            else:
+                predict = prediction
+                groundtruth = truesequence
+
+            edtrain += levenshtein(groundtruth, predict)/len(groundtruth)
+            if i == image_index:
+                print("Prediction: " + str(prediction))
+                print("True: " + str(truesequence))
+
+        for i in tqdm.tqdm(range(0,len(XTest)-1)):
+            prediction = predict_sequence(model, XTest[i], w2i, i2w, max_length_seq, max_image_width)
+            truesequence = [i2w[char] for char in YTest[i]]
+            groundtruth = []
+            predict = []
+            if args.encoding == "standard":
+                gtseq = []
+                prseq = []
+                for token in prediction:
+                    for char in token.split(":"):
+                        prseq.append(char)
+                for token in truesequence:
+                    for char in token.split(":"):
                         gtseq.append(char)
                 groundtruth = gtseq
                 predict = prseq
@@ -226,21 +231,21 @@ def main():
                 predict = prediction
                 groundtruth = truesequence
             
-            ed += levenshtein(predict, groundtruth)/len(truesequence)
+            ed += levenshtein(predict, groundtruth)/len(groundtruth)
             
             if i == image_index:
                 print("Prediction: " + str(prediction))
                 print("True: " + str(truesequence))
         
-        SERTRAIN = (100. *edtrain) / len(XTrain)
-        SER = (100.*ed) / len(XVal)
+        SER = (100. *edtrain) / len(XVal)
+        SERTEST = (100.*ed) / len(XTest)
         if SER < best_ser:
             print(f"SER improved from {best_ser} to {SER}, saving model")
             model.save_weights(f"{args.model_name}.h5")
             best_ser = SER
 
 
-        print(f"SUPER EPOCH {SUPER_EPOCH+1} | SER TRAIN {SERTRAIN} | SER VALIDATION {SER}")
+        print(f"SUPER EPOCH {SUPER_EPOCH+1} | SER TRAIN {SER} | SER VALIDATION {SERTEST}")
 
 
 
