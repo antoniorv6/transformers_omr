@@ -67,7 +67,6 @@ def loadDataPrimus(path, encoding):
                 for char in token.split("-"):
                     splitted_seq.append(char)
             Y.append(splitted_seq)
-       
        if i > limit:
            break
        

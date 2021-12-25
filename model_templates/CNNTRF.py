@@ -44,48 +44,36 @@ def Transformer_Loss_AIAYN(real, pred):
 
     return tf.reduce_sum(loss_)/tf.reduce_sum(mask)
 
-def get_cnn_transformer(conv_filters, num_convs, pool_layers, image_input_shape, VOCAB_SIZE,
-                      transformer_encoder_layers, transformer_decoder_layers, transformer_depth, ff_depth, num_heads, POS_ENCODING_INPUT, POS_ENCODING_TARGET):
+def get_cnn_transformer(conv_filters, pool_layers, image_input_shape, MAX_SEQ_LEN, VOCAB_SIZE,
+                      transformer_encoder_layers, transformer_decoder_layers, model_depth, ff_depth, num_heads, POS_ENCODING_INPUT, POS_ENCODING_TARGET):
 
     #Define convolutional block, remember that we have to scale the mask too
     image_input   =      Input(name='image_input', shape = image_input_shape, dtype=tf.float32)
     decoder_input =      Input(name='decoder_input', shape= (None, ))
-    look_ahead_mask    = Input(name='look_ah_mask', shape=(None, None, None))
+    look_ahead_mask    = Input(name='look_ah_mask', shape=(None, MAX_SEQ_LEN+1, MAX_SEQ_LEN+1))
 
     #=== CONVOLUTIONAL BLOCK ===#
-    #convNet  = VGG16(include_top=False, input_shape=image_input_shape)
-    #convNet.summary()
-    #sys.exit()
+    convNet  = None
     for i in range(len(conv_filters)):
-        for _ in range(num_convs[i]):
-            if i == 0:
-                convNet = Conv2D(conv_filters[i], 5, padding='same')(image_input)
-            else:
-                convNet = Conv2D(conv_filters[i], 3, padding='same')(convNet)
-            convNet = BatchNormalization()(convNet)
-            convNet = LeakyReLU(alpha=0.2)(convNet)
-        
-        convNet = MaxPooling2D(pool_size=(pool_layers[i]))(convNet)
+        if i == 0:
+            convNet = Conv2D(conv_filters[i], 5, padding='same', name=f'conv{i+1}')(image_input)
+        else:
+            convNet = Conv2D(conv_filters[i], 3, padding='same', name=f'conv{i+1}')(convNet)
 
-
+        convNet = BatchNormalization()(convNet)
+        convNet = LeakyReLU(alpha=0.2)(convNet)
+        convNet = MaxPooling2D(pool_size=(pool_layers[i]), name=f'pool{i+1}')(convNet)
 
     #=== CONVOLUTIONAL TO TRANSFORMER CONVERSION ===#
-    convNet = Permute((2,1,3))(convNet)
+    conversion = Permute((2,1,3))(convNet)
     ##(-1, (fixed_height / pool_heights ** pool_layers)*last_conv_filters)
 
-    #model_depth = conv_filters[-1] #pixel-level analysis
-    #encoder_input = Flatten()(convNet)
-    model_depth = transformer_depth
-    #encoder_input = Conv2D(model_depth, kernel_size=3, padding='same')(convNet)
     reshape = (image_input_shape[0] // 2**len(pool_layers)) * conv_filters[-1] #column-level analysis
-    encoder_input = Reshape(target_shape=(-1, reshape), name='reshape_layer')(convNet) #(batch_size, seq_len, d_model)
+    #model_depth = conv_filters[-1] #pixel-level analysis
+    encoder_input = Reshape(target_shape=(-1, reshape), name='reshape_layer')(conversion) #(batch_size, seq_len, d_model)
+    ### NEED TO CONCATENATE (LAST_CONV_SIZE) DUPLIACTES IN THE MASK TO ACHIEVE A CORRECT RESHAPE OF THE MASK
     if(reshape!=model_depth):
         encoder_input = Dense(model_depth)(encoder_input) 
-
-    #encoder_input = Conv2D(model_depth)(encoder_input)
-
-    #encoder_input = Dense(model_depth)(encoder_input)
-    ### NEED TO CONCATENATE (LAST_CONV_SIZE) DUPLIACTES IN THE MASK TO ACHIEVE A CORRECT RESHAPE OF THE MASK
 
     #encoder_input = Dense(reshape_val, activation="softmax")(encoder_input)
 
@@ -99,5 +87,5 @@ def get_cnn_transformer(conv_filters, num_convs, pool_layers, image_input_shape,
     model = Model(inputs=[image_input, decoder_input, look_ahead_mask], outputs=out)
     model.compile(optimizer=Get_Custom_Adam_Optimizer(model_depth), loss=Transformer_Loss_AIAYN)
     model.summary()
-    
+
     return model

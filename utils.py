@@ -27,15 +27,11 @@ def make_vocabulary(YSequences, pathToSave, nameOfVoc):
             vocabulary.update(element)
 
     #Vocabulary created
-    w2i = {symbol:idx+3 for idx,symbol in enumerate(vocabulary)}
-    i2w = {idx+3:symbol for idx,symbol in enumerate(vocabulary)}
+    w2i = {symbol:idx+1 for idx,symbol in enumerate(vocabulary)}
+    i2w = {idx+1:symbol for idx,symbol in enumerate(vocabulary)}
     
     w2i['<pad>'] = 0
     i2w[0] = '<pad>'
-    w2i['<sos>'] = 1
-    i2w[1] = '<sos>'
-    w2i['<eos>'] = 2
-    i2w[2] = '<eos>'
 
     #Save the vocabulary
     np.save(pathToSave + "/" + nameOfVoc + "w2i.npy", w2i)
