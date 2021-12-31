@@ -88,7 +88,7 @@ def batch_confection(X, Y, max_image_width, max_seq_len, w2i):
             if j > 0:
                 Batch_T[i][j-1]= char
             
-        Batch_Y[i][0] = '<sos>'
+        Batch_Y[i][0] = w2i['<sos>']
 
     return Batch_X, Batch_Y, Batch_T
 
@@ -144,7 +144,7 @@ def validateModel(model, testGen, i2w, numOfBatches, encodingType):
             for char in raw_sequence:
                 
                 if encodingType == 'standard':
-                    predictionSequence += char.split("-")
+                    predictionSequence += char.split(":")
                 else:
                     predictionSequence += [char]
                 
@@ -153,7 +153,7 @@ def validateModel(model, testGen, i2w, numOfBatches, encodingType):
             
             for char in raw_trueseq:
                 if encodingType == 'standard':
-                    truesequence += char.split("-")
+                    truesequence += char.split(":")
                 else:
                     truesequence += [char]
 
@@ -173,7 +173,7 @@ def main():
     XTrain = []
     YTrain = []
 
-    XTrain, YTrain = loadDataPrimus(args.data_path, args.encoding)
+    XTrain, YTrain = loadData(args.data_path, args.encoding)
     for i,sequence in enumerate(YTrain):
         YTrain[i] = ['<sos>'] + sequence + ['<eos>']
 
@@ -197,15 +197,16 @@ def main():
     
     model = None
     if args.model_name == "CNNTransformer":
-         model = get_cnn_transformer(conv_filters=[32,64,128],
-                              pool_layers=[2,2,2],
+         model = get_cnn_transformer(conv_filters=[4,8,16,16],
+                              num_convs=[1,1,2,2],
+                              kernel_sizes= [(5,5),(3,3),(3,3),(3,3)],
+                              pool_layers=[(2,2),(2,2),(2,2),(2,2)],
                               image_input_shape=(fixed_height, None, 1),
                               MAX_SEQ_LEN=max_length_seq,
                               VOCAB_SIZE=len(w2i),
-                              transformer_encoder_layers=2,
-                              transformer_decoder_layers=2,
-                              model_depth=512,
-                              ff_depth=512,
+                              transformer_encoder_layers=1,
+                              transformer_decoder_layers=1,
+                              ff_depth=128,
                               num_heads=8,
                               POS_ENCODING_INPUT=max_image_width,
                               POS_ENCODING_TARGET=512)
@@ -221,13 +222,15 @@ def main():
 
     best_ser = 10000
     for SUPER_EPOCH in range(10000):
-        model.fit(batch_gen, steps_per_epoch=len(XTrain)//BATCH_SIZE, epochs=5, verbose=1)
+        model.fit(batch_gen, steps_per_epoch=len(XTrain)//BATCH_SIZE, epochs=20, verbose=1)
+        edition_val_train = validateModel(model, batch_gen, i2w, len(XTrain)//BATCH_SIZE, args.encoding)
         edition_val = validateModel(model, val_gen, i2w, len(XVal)//BATCH_SIZE, args.encoding)
         edition_test = validateModel(model, test_gen, i2w, len(XTest)//BATCH_SIZE, args.encoding)
+        SER_TRAIN = (100. * edition_val_train) / len(XTrain)
         SER = (100. * edition_val) / len(XVal)
         SER_TEST = (100. * edition_test) / len(XTest)
 
-        print(f'| Epoch {(SUPER_EPOCH + 1)} | Validation SER: {SER} | Test SER: {SER_TEST}')
+        print(f'| Epoch {(SUPER_EPOCH + 1)} | Train SER: {SER_TRAIN} | Validation SER: {SER} | Test SER: {SER_TEST}')
         
         if SER < best_ser:
             print("SER improved, saving model")
